@@ -1,0 +1,139 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+
+matplotlib.rcParams.update({
+    'font.family': 'serif',
+    'font.size': 11,
+    'axes.labelsize': 13,
+    'axes.titlesize': 14,
+    'legend.fontsize': 11,
+    'figure.dpi': 200,
+})
+
+# Les CSV-filen
+rows = []
+with open('C:/Users/emilg/Downloads/NetworkAnalyse.csv', 'r', encoding='latin-1') as f:
+    for line in f:
+        line = line.strip().replace('\r', '')
+        if line.startswith('#') or line == '':
+            continue
+        if line.startswith('Frequency'):
+            continue
+        parts = line.split(',')
+        rows.append([float(x) for x in parts])
+
+data = np.array(rows)
+
+freq = data[:, 0]
+ch2_mag = data[:, 2]
+ch2_phase = data[:, 3]
+
+# Finn notch-frekvensen
+idx_notch = np.argmin(ch2_mag)
+f_notch = freq[idx_notch]
+mag_notch = ch2_mag[idx_notch]
+phase_notch = ch2_phase[idx_notch]
+
+# Beregn Q-faktor fra -3 dB båndbredde
+# -3 dB punktene er der amplituden er 3 dB over notch-minimum
+# Men for et notch-filter bruker vi -3 dB fra passbåndnivået
+passband_level = 0  # ideell 0 dB i passbåndet
+bw_level = passband_level - 3  # -3 dB nivå
+
+# Finn -3 dB frekvenser (der kurven krysser -3 dB)
+# Nedre -3 dB frekvens (før notch)
+below_notch = freq < f_notch
+above_bw = ch2_mag[below_notch] > bw_level
+below_bw = ch2_mag[below_notch] <= bw_level
+if np.any(below_bw) and np.any(above_bw):
+    # Finn siste krysningspunkt før notch
+    crossings = np.where(np.diff((ch2_mag[below_notch] > bw_level).astype(int)) == -1)[0]
+    if len(crossings) > 0:
+        idx_lo = crossings[-1]
+        f_lo = np.interp(bw_level, 
+                         [ch2_mag[below_notch][idx_lo+1], ch2_mag[below_notch][idx_lo]],
+                         [freq[below_notch][idx_lo+1], freq[below_notch][idx_lo]])
+    else:
+        f_lo = freq[0]
+else:
+    f_lo = freq[0]
+
+# Øvre -3 dB frekvens (etter notch)
+above_notch = freq > f_notch
+crossings_hi = np.where(np.diff((ch2_mag[above_notch] > bw_level).astype(int)) == 1)[0]
+if len(crossings_hi) > 0:
+    idx_hi = crossings_hi[0]
+    f_hi = np.interp(bw_level,
+                     [ch2_mag[above_notch][idx_hi], ch2_mag[above_notch][idx_hi+1]],
+                     [freq[above_notch][idx_hi], freq[above_notch][idx_hi+1]])
+else:
+    f_hi = freq[-1]
+
+BW = f_hi - f_lo
+Q = f_notch / BW
+
+# --- Plott 1: Amplituderespons ---
+fig1, ax1 = plt.subplots(figsize=(8, 5))
+
+ax1.plot(freq, ch2_mag, linewidth=1.8, color='#2980b9')
+ax1.set_xlabel('Frekvens $f$ [Hz]')
+ax1.set_ylabel('Forsterkning $|H(f)|$ [dB]')
+ax1.set_title('Amplituderespons')
+ax1.set_xscale('log')
+ax1.grid(True, alpha=0.3)
+
+ax1.plot(f_notch, mag_notch, 'ro', markersize=7, zorder=5)
+ax1.annotate(f'$f_0 = {f_notch:.1f}$ Hz\n${mag_notch:.1f}$ dB',
+             xy=(f_notch, mag_notch), xytext=(f_notch * 1.8, mag_notch + 5),
+             fontsize=10, color='red',
+             arrowprops=dict(arrowstyle='->', color='red', lw=1.2))
+
+# Marker -3 dB båndbredde
+ax1.axhline(bw_level, color='green', linestyle=':', linewidth=1, alpha=0.6)
+ax1.plot(f_lo, bw_level, 'g^', markersize=8, zorder=5)
+ax1.plot(f_hi, bw_level, 'g^', markersize=8, zorder=5)
+
+# Dobbeltpil for båndbredde
+ax1.annotate('', xy=(f_lo, bw_level - 2), xytext=(f_hi, bw_level - 2),
+             arrowprops=dict(arrowstyle='<->', color='green', lw=1.5))
+ax1.text(np.sqrt(f_lo * f_hi), bw_level - 4.5,
+         f'$BW = {BW:.0f}$ Hz', fontsize=10, color='green', ha='center')
+
+# Tekstboks med Q-faktor og BW
+textstr = f'$Q = f_0 / BW = {Q:.2f}$\n$BW = {BW:.0f}$ Hz\n$f_L = {f_lo:.0f}$ Hz\n$f_H = {f_hi:.0f}$ Hz'
+props = dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray')
+ax1.text(0.97, 0.97, textstr, transform=ax1.transAxes, fontsize=9,
+         verticalalignment='top', horizontalalignment='right', bbox=props)
+
+ax1.set_xticks([500, 1000, 2000, 5000, 10000])
+ax1.set_xticklabels(['500', '1k', '2k', '5k', '10k'])
+
+fig1.tight_layout()
+
+
+# --- Plott 2: Faserespons ---
+fig2, ax2 = plt.subplots(figsize=(8, 5))
+
+ax2.plot(freq, ch2_phase, linewidth=1.8, color='#e67e22')
+ax2.set_xlabel('Frekvens $f$ [Hz]')
+ax2.set_ylabel('Fase $\\angle H(f)$ [°]')
+ax2.set_title('Faserespons')
+ax2.set_xscale('log')
+ax2.grid(True, alpha=0.3)
+
+ax2.axvline(f_notch, color='red', linestyle='--', linewidth=1, alpha=0.5)
+ax2.plot(f_notch, phase_notch, 'ro', markersize=7, zorder=5)
+ax2.annotate(f'$f_0 = {f_notch:.1f}$ Hz\n${phase_notch:.1f}$°',
+             xy=(f_notch, phase_notch), xytext=(f_notch * 2, phase_notch),
+             fontsize=10, color='red',
+             arrowprops=dict(arrowstyle='->', color='red', lw=1.2))
+
+ax2.set_xticks([500, 1000, 2000, 5000, 10000])
+ax2.set_xticklabels(['500', '1k', '2k', '5k', '10k'])
+
+fig2.tight_layout()
+
+
+print(f"Notch-frekvens: {f_notch:.1f} Hz, demping: {mag_notch:.1f} dB, fase: {phase_notch:.1f}°")
+print("Plott lagret.")
