@@ -1,0 +1,55 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+
+matplotlib.rcParams.update({
+    'font.family': 'serif',
+    'font.size': 11,
+    'axes.labelsize': 13,
+    'axes.titlesize': 14,
+    'legend.fontsize': 11,
+    'figure.dpi': 200,
+})
+
+# Les CSV-filen, hopp over kommentarlinjer
+import csv, io
+
+rows = []
+with open('C:/Users/emilg/Downloads/acq0001.csv', 'r', encoding='latin-1') as f:
+    for line in f:
+        if line.startswith('#') or line.strip() == '':
+            continue
+        if line.startswith('Frequency'):
+            continue  # kolonneoverskrift
+        parts = line.strip().split(',')
+        rows.append([float(x) for x in parts])
+
+data = np.array(rows)
+
+freq = data[:, 0]       # Frekvens [Hz]
+amplitude = data[:, 1]  # Amplitude [dB]
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+ax.plot(freq, amplitude, linewidth=0.8, color='#1f77b4')
+
+ax.set_xlabel('Frekvens $f$ [Hz]')
+ax.set_ylabel('Amplitude [dB]')
+ax.set_title('Spektrumanalyse av inngangssignal (Scope 1)')
+ax.set_xlim(0, 2000)
+ax.grid(True, alpha=0.3)
+
+# Marker pipetonen — finn toppen i området rundt 1137 Hz
+mask = (freq > 1100) & (freq < 1170)
+idx_peak = np.argmax(amplitude[mask])
+f_pipe = freq[mask][idx_peak]
+amp_pipe = amplitude[mask][idx_peak]
+
+ax.axvline(f_pipe, color='red', linestyle='--', linewidth=1, alpha=0.6)
+ax.plot(f_pipe, amp_pipe, 'ro', markersize=6)
+ax.annotate(f'Pipetone\n$f = {f_pipe:.1f}$ Hz\n${amp_pipe:.1f}$ dB',
+            xy=(f_pipe, amp_pipe), xytext=(f_pipe + 300, amp_pipe - 15),
+            fontsize=10, color='red',
+            arrowprops=dict(arrowstyle='->', color='red', lw=1.2))
+
+plt.tight_layout()
