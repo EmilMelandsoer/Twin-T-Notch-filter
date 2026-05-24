@@ -1,0 +1,64 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+
+matplotlib.rcParams.update({
+    'font.family': 'serif',
+    'font.size': 11,
+    'axes.labelsize': 13,
+    'axes.titlesize': 14,
+    'legend.fontsize': 11,
+    'figure.dpi': 200,
+})
+
+# Komponentverdier
+R = 933       # Ohm
+C = 150e-9    # Farad
+f0 = 1 / (2 * np.pi * R * C)  # Senterfrekvens
+
+# Frekvensakse
+f = np.logspace(1, 4.5, 2000)  # 10 Hz til ~30 kHz
+omega = 2 * np.pi * f
+
+# --- Lavpassfilter (øverste T): R1, R2 i serie, C1 til jord ---
+# LP: H_lp = 1 / (1 + j*omega*R*C)  (1. ordens tilnærming)
+H_lp = 1 / (1 + 1j * omega * R * C)
+
+# --- Høypassfilter (nederste T): C2, C3 i serie, R3 til jord ---
+# HP: H_hp = j*omega*R*C / (1 + j*omega*R*C)  (1. ordens tilnærming)
+# Bruker R3 = R/2 og C2=C3=C, som gir samme knekkfrekvens
+H_hp = (1j * omega * R * C) / (1 + 1j * omega * R * C)
+
+# --- Samlet Twin-T Notch overføringsfunksjon ---
+s = 1j * omega
+RC = R * C
+H_notch = (s**2 + 1/(RC)**2) / (s**2 + 4*s/RC + 1/(RC)**2)
+
+# Konverter til dB
+H_lp_dB = 20 * np.log10(np.abs(H_lp))
+H_hp_dB = 20 * np.log10(np.abs(H_hp))
+H_notch_dB = 20 * np.log10(np.abs(H_notch))
+
+# --- Plotting ---
+fig, ax = plt.subplots(figsize=(8, 5))
+
+ax.plot(f, H_lp_dB, color='#2ca02c', linewidth=2, label='Lavpassfilter $H_{LP}(f)$')
+ax.plot(f, H_hp_dB, color='#d62728', linewidth=2, label='Høypassfilter $H_{HP}(f)$')
+ax.plot(f, H_notch_dB, color='#1f77b4', linewidth=2.2, label='Twin-T Notch $H(f)$', linestyle='--')
+
+# Marker senterfrekvensen
+ax.axvline(f0, color='gray', linestyle=':', linewidth=1, alpha=0.7)
+
+
+ax.set_xscale('log')
+ax.set_xlabel('Frekvens $f$ [Hz]')
+ax.set_ylabel('Forsterkning $|H(f)|$ [dB]')
+ax.set_title('Frekvensrespons for Twin-T Notch filter')
+ax.set_xlim(10, 30000)
+ax.set_ylim(-50, 3)
+ax.legend(loc='lower left')
+ax.grid(True, which='both', alpha=0.3)
+ax.set_xticks([10, 100, 1000, 10000])
+ax.set_xticklabels(['10', '100', '1k', '10k'])
+
+plt.tight_layout()
